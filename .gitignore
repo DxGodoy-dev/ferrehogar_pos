@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.env
+.venv/
+ferreteria.db
+.pytest_cache/
+.DS_Store

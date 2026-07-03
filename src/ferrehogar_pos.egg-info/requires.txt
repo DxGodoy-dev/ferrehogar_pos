@@ -1,0 +1,5 @@
+flet>=0.85.1
+flet-web>=0.85.1
+pybcv>=1.1.2
+pydantic>=2.13.4
+sqlalchemy>=2.0.49

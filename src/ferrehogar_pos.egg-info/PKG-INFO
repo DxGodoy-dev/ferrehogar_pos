@@ -1,0 +1,11 @@
+Metadata-Version: 2.4
+Name: ferrehogar-pos
+Version: 0.1.0
+Summary: Punto de Venta minimalista para ferretería con conversión BCV
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: flet>=0.85.1
+Requires-Dist: flet-web>=0.85.1
+Requires-Dist: pybcv>=1.1.2
+Requires-Dist: pydantic>=2.13.4
+Requires-Dist: sqlalchemy>=2.0.49
