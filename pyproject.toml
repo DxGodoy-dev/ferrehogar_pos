@@ -19,6 +19,7 @@ managed = true
 
 [project.scripts]
 ferrehogar-pos = "ferrehogar_pos.main:ejecutar_pos"
+ferrehogar-debug = "ferrehogar_pos.debug"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
