@@ -14,12 +14,16 @@ dependencies = [
     "sqlalchemy>=2.0.49",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ferrehogar_pos"]
+
 [tool.uv]
-managed = true
+package = true
 
 [project.scripts]
 ferrehogar-pos = "ferrehogar_pos.main:ejecutar_pos"
-ferrehogar-debug = "ferrehogar_pos.debug"
-
-[tool.setuptools]
-package-dir = {"" = "src"}
+ferrehogar-debug = "ferrehogar_pos.debug:debug"

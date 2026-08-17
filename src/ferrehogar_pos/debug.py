@@ -1,4 +1,5 @@
-from src.ferrehogar_pos.core.database import SessionLocal, ProductoDB
+from ferrehogar_pos.core.database import ProductoDB, SessionLocal
+
 
 def debug():
     db = SessionLocal()
