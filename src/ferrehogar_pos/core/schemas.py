@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ProductoBase(BaseModel):
@@ -10,7 +10,7 @@ class ProductoBase(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     area: str = Field(default="General", max_length=50)
     precio_venta_usd: float = Field(..., gt=0.0)
-    precio_compra_usd: float = Field(..., gt=0.0)
+    precio_compra_usd: float = Field(default=0.0, ge=0.0)
 
     @field_validator("nombre")
     @classmethod
@@ -20,7 +20,7 @@ class ProductoBase(BaseModel):
 
     @field_validator("aliases", mode="before")
     @classmethod
-    def normalizar_aliases(cls, v: any) -> list[str]:
+    def normalizar_aliases(cls, v: object) -> list[str]:
         """Asegura que los aliases sean siempre una lista de strings limpios y en minúsculas."""
         if isinstance(v, str):
             if not v.strip():
@@ -43,5 +43,4 @@ class ProductoDTO(ProductoBase):
     id: int
     ultima_actualizacion: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

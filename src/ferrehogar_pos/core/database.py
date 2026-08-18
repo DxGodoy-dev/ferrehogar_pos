@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, create_engine
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -51,7 +51,7 @@ class ProductoDB(Base):
     area = Column(String(50), default="General", index=True)
     precio_venta_usd = Column(Float, nullable=False)
     precio_compra_usd = Column(Float, nullable=False)
-    ultima_actualizacion = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    ultima_actualizacion = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relación uno-a-muchos con carga inmediata (eager loading) para facilitar el DTO
     aliases_rel = relationship(
