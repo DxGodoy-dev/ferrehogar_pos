@@ -9,7 +9,6 @@ from pathlib import Path
 
 def ejecutar_pos(log_path: str | Path | None = None) -> int:
     """Lanza el POS en un subproceso desacoplado y retorna su PID."""
-    print("DEBUG: Iniciando lanzamiento...")
     env = os.environ.copy()
     pythonpath_parts = list(sys.path)
     existing_pythonpath = env.get("PYTHONPATH")
@@ -31,7 +30,7 @@ def ejecutar_pos(log_path: str | Path | None = None) -> int:
     if log_path:
         target_path = Path(log_path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
-        file_ctx = open(target_path, "w", encoding="utf-8") # noqa: SIM115
+        file_ctx = open(target_path, "w", encoding="utf-8")  # noqa: SIM115
     else:
         file_ctx = nullcontext(subprocess.DEVNULL)
 
@@ -43,7 +42,6 @@ def ejecutar_pos(log_path: str | Path | None = None) -> int:
             **popen_kwargs,
         )
 
-    print(f"DEBUG: Lanzado con PID {proceso.pid}. Terminando padre.")
     return proceso.pid
 
 

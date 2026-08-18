@@ -1,5 +1,7 @@
+LICENSE
 README.md
 pyproject.toml
+src/ferrehogar_pos/debug.py
 src/ferrehogar_pos/main.py
 src/ferrehogar_pos.egg-info/PKG-INFO
 src/ferrehogar_pos.egg-info/SOURCES.txt
@@ -13,6 +15,7 @@ src/ferrehogar_pos/core/__init__.py
 src/ferrehogar_pos/core/crud.py
 src/ferrehogar_pos/core/database.py
 src/ferrehogar_pos/core/exchange.py
+src/ferrehogar_pos/core/inyector.py
 src/ferrehogar_pos/core/logger.py
 src/ferrehogar_pos/core/schemas.py
 src/ferrehogar_pos/views/__init__.py

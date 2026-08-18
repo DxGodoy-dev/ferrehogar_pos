@@ -4,8 +4,12 @@ Version: 0.1.0
 Summary: Punto de Venta minimalista para ferretería con conversión BCV
 Requires-Python: >=3.12
 Description-Content-Type: text/markdown
+License-File: LICENSE
 Requires-Dist: flet>=0.85.1
 Requires-Dist: flet-web>=0.85.1
+Requires-Dist: openpyxl>=3.1.5
+Requires-Dist: pandas>=3.0.3
 Requires-Dist: pybcv>=1.1.2
 Requires-Dist: pydantic>=2.13.4
 Requires-Dist: sqlalchemy>=2.0.49
+Dynamic: license-file
