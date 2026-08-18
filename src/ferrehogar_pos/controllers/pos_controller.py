@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from ..core.database import init_db, ProductoDB, SessionLocal
 from ..core.exchange import ExchangeRateProvider
 from ..core import crud
-
+from ..core.crud import obtener_session
 
 class POSController:
     """Controlador principal que gestiona la lógica de negocio para el punto de venta."""
@@ -20,10 +20,6 @@ class POSController:
         
         # Intentar cargar la tasa del BCV al iniciar el controlador
         self.actualizar_tasa_bcv()
-
-        # Inicializamos la DB
-        self.db = SessionLocal()
-
 
     def actualizar_tasa_bcv(self) -> tuple[float, str] | None:
         """Intenta obtener la tasa oficial del día y actualiza la fecha en memoria."""
@@ -45,7 +41,8 @@ class POSController:
 
     def buscar_productos(self, termino: str) -> list[ProductoDB]:
         """Invoca la búsqueda inteligente en la base de datos."""
-        return crud.buscar_productos_por_termino(self.db, termino)
+        with obtener_session() as db:
+            return crud.buscar_productos_por_termino(db, termino)
 
     def gestionar_cantidad(self, producto, decremento=False):
         """Gestiona el incremento o decremento de cantidades en el carrito."""
