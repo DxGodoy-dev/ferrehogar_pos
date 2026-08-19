@@ -44,3 +44,13 @@ class ProductoDTO(ProductoBase):
     ultima_actualizacion: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("aliases", mode="before")
+    @classmethod
+    def extraer_aliases_orm(cls, v: object) -> object:
+        """Permite mapear la relación ProductoDB.aliases_rel si está presente."""
+        if hasattr(v, "__iter__") and not isinstance(v, (str, bytes)):
+            items = list(v)
+            if items and hasattr(items[0], "alias"):
+                return [item.alias for item in items]
+        return v

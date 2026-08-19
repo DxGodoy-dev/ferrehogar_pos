@@ -1,25 +1,61 @@
+from __future__ import annotations
+
 import os
-from pathlib import Path
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, create_engine
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from pathlib import Path
 
-# Configuración del motor de la base de datos local
-BASE_DIR = Path.home() / ".local" / "share" / "ferrehogar-pos"
-BASE_DIR.mkdir(parents=True, exist_ok=True) # Crea el directorio si no existe
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, create_engine, event
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
 
-# Construir la URL absoluta
-DATABASE_PATH = BASE_DIR / "ferreteria.db"
-DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 
-# Configuración del motor
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+def _obtener_db_url() -> str:
+    """Determina la URL de la base de datos según variables de entorno o ruta local estándar."""
+    env_url = os.environ.get("FERREHOGAR_DB_URL")
+    if env_url:
+        return env_url
 
-# Creador de sesiones para interactuar con las tablas
+    env_path = os.environ.get("FERREHOGAR_DB_PATH")
+    if env_path:
+        db_path = Path(env_path)
+    else:
+        # Ruta estándar multiplataforma
+        if os.name == "nt":
+            app_data = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
+            base_dir = Path(app_data) / "ferrehogar-pos" if app_data else Path.home() / ".ferrehogar-pos"
+        else:
+            base_dir = Path.home() / ".local" / "share" / "ferrehogar-pos"
+
+        base_dir.mkdir(parents=True, exist_ok=True)
+        db_path = base_dir / "ferreteria.db"
+
+    return f"sqlite:///{db_path}"
+
+
+DATABASE_URL = _obtener_db_url()
+
+# Configuración del motor SQLite
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False},
+)
+
+
+# Habilitar el soporte de claves foráneas en SQLite
+@event.listens_for(Engine, "connect")
+def _activar_foreign_keys(dbapi_connection: object, connection_record: object) -> None:
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON;")
+    cursor.close()
+
+
+# Creador de sesiones
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Clase base para los modelos relacionales
-Base = declarative_base()
+
+# Clase base moderna de SQLAlchemy 2.0
+class Base(DeclarativeBase):
+    pass
 
 
 class ProductoAliasDB(Base):
@@ -29,10 +65,10 @@ class ProductoAliasDB(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     producto_id = Column(
-        Integer, 
-        ForeignKey("productos.id", ondelete="CASCADE"), 
-        nullable=False, 
-        index=True
+        Integer,
+        ForeignKey("productos.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     alias = Column(String(100), nullable=False, index=True)
 
@@ -51,17 +87,21 @@ class ProductoDB(Base):
     area = Column(String(50), default="General", index=True)
     precio_venta_usd = Column(Float, nullable=False)
     precio_compra_usd = Column(Float, nullable=False)
-    ultima_actualizacion = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    ultima_actualizacion = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
-    # Relación uno-a-muchos con carga inmediata (eager loading) para facilitar el DTO
+    # Relación uno-a-muchos con borrado en cascada
     aliases_rel = relationship(
-        "ProductoAliasDB", 
-        back_populates="producto", 
+        "ProductoAliasDB",
+        back_populates="producto",
         cascade="all, delete-orphan",
-        lazy="joined"
+        lazy="selectinload",
     )
 
 
-def init_db():
+def init_db() -> None:
     """Crea todas las tablas definidas si no existen en la base de datos."""
     Base.metadata.create_all(bind=engine)

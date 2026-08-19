@@ -1,17 +1,22 @@
-# pyrefly: ignore [missing-import]
+from __future__ import annotations
+
 import flet as ft
 
 
 class BannerTasa(ft.Row):
     """Componente puramente visual que renderiza el encabezado de la tasa del POS."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # Inicializamos los textos con estilos base limpios
         self.txt_titulo = ft.Text(
-            "FerreHogar POS - Mostrador", size=22, weight=ft.FontWeight.BOLD
+            "FerreHogar POS - Mostrador",
+            size=22,
+            weight=ft.FontWeight.BOLD,
         )
         self.txt_info_tasa = ft.Text(
-            "Tasa BCV: Cargando...", size=14, weight=ft.FontWeight.W_500
+            "Tasa BCV: Cargando...",
+            size=14,
+            weight=ft.FontWeight.W_500,
         )
 
         # Pasamos los controles al inicializador del Row nativo de Flet
@@ -21,16 +26,21 @@ class BannerTasa(ft.Row):
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
 
-    def actualizar_tasa(self, valor_tasa: float | None, fecha_tasa: str | None):
+    def actualizar_tasa(
+        self, valor_tasa: float | None, fecha_tasa: str | None
+    ) -> None:
         """Método expuesto para que el mediador actualice los textos externamente."""
         if (
             valor_tasa is not None
             and isinstance(valor_tasa, (int, float))
             and valor_tasa > 0
         ):
+            fecha_str = f" ({fecha_tasa})" if fecha_tasa else ""
             self.txt_info_tasa.value = (
-                f"Tasa BCV: {valor_tasa:.2f} VES/USD ({fecha_tasa})"
+                f"Tasa BCV: {valor_tasa:.2f} VES/USD{fecha_str}"
             )
         else:
             self.txt_info_tasa.value = "Tasa BCV: No disponible / Offline"
-        # Nota: No llamamos a self.update() aquí para dejar que la página principal controle el render
+
+        if self.page:
+            self.update()

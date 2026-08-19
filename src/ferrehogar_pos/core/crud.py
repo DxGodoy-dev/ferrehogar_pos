@@ -2,18 +2,15 @@ from collections.abc import Generator
 from contextlib import contextmanager
 
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ferrehogar_pos.core.database import ProductoAliasDB, ProductoDB, SessionLocal
-from ferrehogar_pos.core.schemas import ProductoCrear
+from ferrehogar_pos.core.schemas import ProductoCrear, ProductoDTO
 
 
 @contextmanager
 def obtener_session() -> Generator[Session, None, None]:
     """Gestiona el ciclo de vida y cierre seguro de sesiones de base de datos.
-
-    Args:
-        None
 
     Yields:
         Session: Sesión activa de SQLAlchemy para interactuar con la base de datos.
@@ -28,7 +25,7 @@ def obtener_session() -> Generator[Session, None, None]:
         db.close()
 
 
-def buscar_productos_por_termino(db: Session, termino: str) -> list[ProductoDB]:
+def buscar_productos_por_termino(db: Session, termino: str) -> list[ProductoDTO]:
     """Busca productos por código, coincidencia parcial en nombre o en sus aliases.
 
     Args:
@@ -36,7 +33,7 @@ def buscar_productos_por_termino(db: Session, termino: str) -> list[ProductoDB]:
         termino (str): Término o criterio de búsqueda (código, nombre o alias).
 
     Returns:
-        list[ProductoDB]: Lista de productos coincidentes sin duplicados.
+        list[ProductoDTO]: Lista de productos coincidentes sin duplicados desacoplados de la DB.
 
     Raises:
         SQLAlchemyError: Si ocurre un fallo durante la consulta a la base de datos.
@@ -45,8 +42,9 @@ def buscar_productos_por_termino(db: Session, termino: str) -> list[ProductoDB]:
     if not termino_limpio:
         return []
 
-    return (
+    productos_db = (
         db.query(ProductoDB)
+        .options(selectinload(ProductoDB.aliases_rel))
         .outerjoin(ProductoDB.aliases_rel)
         .filter(
             or_(
@@ -59,8 +57,22 @@ def buscar_productos_por_termino(db: Session, termino: str) -> list[ProductoDB]:
         .all()
     )
 
+    return [
+        ProductoDTO(
+            id=p.id,
+            codigo=p.codigo,
+            nombre=p.nombre,
+            area=p.area,
+            precio_venta_usd=p.precio_venta_usd,
+            precio_compra_usd=p.precio_compra_usd,
+            aliases=[a.alias for a in p.aliases_rel] if p.aliases_rel else [],
+            ultima_actualizacion=p.ultima_actualizacion,
+        )
+        for p in productos_db
+    ]
 
-def crear_producto_local(db: Session, producto_in: ProductoCrear) -> ProductoDB:
+
+def crear_producto_local(db: Session, producto_in: ProductoCrear) -> ProductoDTO:
     """Registra un nuevo producto y sus aliases usando relaciones de SQLAlchemy.
 
     Args:
@@ -68,7 +80,7 @@ def crear_producto_local(db: Session, producto_in: ProductoCrear) -> ProductoDB:
         producto_in (ProductoCrear): Datos validados del producto y sus aliases a persistir.
 
     Returns:
-        ProductoDB: Instancia del producto creado y persistido en la base de datos.
+        ProductoDTO: Instancia validada y persistida en formato DTO.
 
     Raises:
         IntegrityError: Si el código del producto ya existe o viola una restricción de unicidad.
@@ -92,4 +104,14 @@ def crear_producto_local(db: Session, producto_in: ProductoCrear) -> ProductoDB:
     db.add(nuevo_producto)
     db.commit()
     db.refresh(nuevo_producto)
-    return nuevo_producto
+
+    return ProductoDTO(
+        id=nuevo_producto.id,
+        codigo=nuevo_producto.codigo,
+        nombre=nuevo_producto.nombre,
+        area=nuevo_producto.area,
+        precio_venta_usd=nuevo_producto.precio_venta_usd,
+        precio_compra_usd=nuevo_producto.precio_compra_usd,
+        aliases=[a.alias for a in nuevo_producto.aliases_rel] if nuevo_producto.aliases_rel else [],
+        ultima_actualizacion=nuevo_producto.ultima_actualizacion,
+    )

@@ -5,6 +5,7 @@ import subprocess
 import sys
 from contextlib import nullcontext
 from pathlib import Path
+from typing import Any
 
 
 def ejecutar_pos(log_path: str | Path | None = None) -> int:
@@ -16,14 +17,18 @@ def ejecutar_pos(log_path: str | Path | None = None) -> int:
         pythonpath_parts.append(existing_pythonpath)
     env["PYTHONPATH"] = os.pathsep.join(part for part in pythonpath_parts if part)
 
-    popen_kwargs: dict = {
+    popen_kwargs: dict[str, Any] = {
         "stdin": subprocess.DEVNULL,
         "close_fds": True,
         "env": env,
     }
 
     if os.name == "nt":
-        popen_kwargs["creationflags"] = 0x00000008 | 0x00000200
+        # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+        flags = getattr(subprocess, "DETACHED_PROCESS", 0x00000008) | getattr(
+            subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200
+        )
+        popen_kwargs["creationflags"] = flags
     else:
         popen_kwargs["start_new_session"] = True
 
@@ -45,5 +50,11 @@ def ejecutar_pos(log_path: str | Path | None = None) -> int:
     return proceso.pid
 
 
+def main() -> None:
+    """Punto de entrada principal para ejecución interactiva y CLI."""
+    pid = ejecutar_pos()
+    print(f"FerreHogar POS iniciado en segundo plano (PID: {pid}).")
+
+
 if __name__ == "__main__":
-    ejecutar_pos()
+    main()
