@@ -5,85 +5,117 @@ from typing import Any
 
 import flet as ft
 
-from ferrehogar_pos.core.schemas import ProductoDTO
+from ferrehogar_pos.schemas.producto import ProductoDTO
+from ferrehogar_pos.views.widgets.empty_state import crear_estado_vacio
+from ferrehogar_pos.views.widgets.quantity_selector import crear_selector_cantidad
+from ferrehogar_pos.views.widgets.summary_card import crear_tarjeta_resumen
 
 
-class PanelCarrito(ft.Container):
-    """Componente de interfaz que encapsula el diseño del carrito de compras y los totales."""
+def crear_panel_carrito(
+    carrito: dict[int, dict[str, Any]],
+    totales: dict[str, float | int],
+    on_incrementar: Callable[[ProductoDTO], None],
+    on_decrementar: Callable[[ProductoDTO], None],
+    on_limpiar: Callable[[], None],
+    on_cobrar: Callable[[], None],
+) -> ft.Container:
+    """Construye el panel lateral derecho correspondiente al carrito componiendo widgets atómicos."""
+    esta_vacio = len(carrito) == 0
 
-    def __init__(self, on_limpiar_click: Callable[[Any], None]) -> None:
-        # Lista vertical interna para ir renderizando los productos agregados
-        self.lista_items = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True)
-
-        # Textos de totales con estilos legibles para el mostrador
-        self.txt_subtotal_usd = ft.Text("$0.00", size=18, weight=ft.FontWeight.W_500)
-        self.txt_total_ves = ft.Text(
-            "0 VES",
-            size=32,
-            weight=ft.FontWeight.BOLD,
-            color=ft.Colors.GREEN_700,
+    if esta_vacio:
+        cuerpo_control: ft.Control = crear_estado_vacio(
+            icono=ft.Icons.SHOPPING_CART_OUTLINED,
+            mensaje="El carrito está vacío",
+            submensaje="Seleccione productos del catálogo para comenzar",
         )
+    else:
+        filas_items: list[ft.Control] = []
+        for item in carrito.values():
+            prod: ProductoDTO = item["producto"]
+            cant: int = item["cantidad"]
+            subtotal_usd = prod.precio_venta_usd * cant
 
-        # Botón para vaciar la transacción, invocando el callback externo
-        self.btn_limpiar = ft.ElevatedButton(
-            "Limpiar Venta",
-            icon=ft.Icons.DELETE_OUTLINE,
-            on_click=on_limpiar_click,
-            style=ft.ButtonStyle(color=ft.Colors.RED_700),
-        )
-
-        # Construimos el contenedor con su diseño de fondo y padding
-        super().__init__(
-            content=ft.Column(
-                [
-                    ft.Text("Detalle de la Cuenta:", weight=ft.FontWeight.BOLD, size=16),
-                    ft.Divider(),
-                    self.lista_items,
-                    ft.Divider(),
-                    ft.Row(
-                        [ft.Text("Subtotal USD:"), self.txt_subtotal_usd],
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    ),
-                    ft.Row(
-                        [ft.Text("TOTAL VES:"), self.txt_total_ves],
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                    ),
-                    ft.Container(expand=True),
-                    self.btn_limpiar,
-                ],
-                expand=True,
-            ),
-            expand=2,
-            padding=15,
-            bgcolor=ft.Colors.GREY_50,
-            border_radius=8,
-        )
-
-    def actualizar_interfaz_carrito(
-        self,
-        items_carrito: dict[int, dict[str, Any]],
-        total_usd: float,
-        total_ves: int,
-    ) -> None:
-        """Método expuesto para re-renderizar los montos y productos desde el mediador."""
-        self.txt_subtotal_usd.value = f"${total_usd:.2f}"
-        self.txt_total_ves.value = f"{total_ves:,} VES".replace(",", ".")
-
-        # Limpiamos visualmente las filas anteriores y agregamos el estado actual
-        self.lista_items.controls.clear()
-
-        for datos in items_carrito.values():
-            prod: ProductoDTO = datos["producto"]
-            cant: int = datos["cantidad"]
-            sub_usd = prod.precio_venta_usd * cant
-
-            self.lista_items.controls.append(
-                ft.ListTile(
-                    title=ft.Text(prod.nombre, max_lines=1),
-                    subtitle=ft.Text(f"{cant} x ${prod.precio_venta_usd:.2f}"),
-                    trailing=ft.Text(f"${sub_usd:.2f}", weight=ft.FontWeight.BOLD),
-                )
+            fila = ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Column(
+                            controls=[
+                                ft.Text(
+                                    prod.nombre,
+                                    size=13,
+                                    weight=ft.FontWeight.BOLD,
+                                    max_lines=1,
+                                    overflow=ft.TextOverflow.ELLIPSIS,
+                                ),
+                                ft.Text(
+                                    f"${prod.precio_venta_usd:.2f} c/u",
+                                    size=11,
+                                    color=ft.Colors.GREY_600,
+                                ),
+                            ],
+                            expand=True,
+                            spacing=2,
+                        ),
+                        crear_selector_cantidad(
+                            cantidad=cant,
+                            on_incrementar=lambda p=prod: on_incrementar(p),
+                            on_decrementar=lambda p=prod: on_decrementar(p),
+                        ),
+                        ft.Text(
+                            f"${subtotal_usd:.2f}",
+                            size=13,
+                            weight=ft.FontWeight.BOLD,
+                            text_align=ft.TextAlign.RIGHT,
+                            width=65,
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                padding=ft.padding.symmetric(vertical=6, horizontal=8),
+                border=ft.border.only(bottom=ft.BorderSide(1, ft.Colors.GREY_200)),
             )
+            filas_items.append(fila)
 
-        if self.page:
-            self.update()
+        cuerpo_control = ft.ListView(
+            controls=filas_items,
+            expand=True,
+            spacing=2,
+        )
+
+    tarjeta_resumen = crear_tarjeta_resumen(
+        total_usd=float(totales.get("total_usd", 0.0)),
+        total_ves=int(totales.get("total_ves", 0)),
+        on_limpiar=on_limpiar,
+        on_cobrar=on_cobrar,
+        deshabilitado=esta_vacio,
+    )
+
+    return ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Row(
+                    controls=[
+                        ft.Icon(ft.Icons.SHOPPING_BAG, color=ft.Colors.BLUE_GREY_700),
+                        ft.Text(
+                            "Resumen de Venta",
+                            size=16,
+                            weight=ft.FontWeight.BOLD,
+                            color=ft.Colors.BLUE_GREY_800,
+                        ),
+                    ],
+                    spacing=8,
+                ),
+                ft.Divider(height=10, thickness=1),
+                cuerpo_control,
+                tarjeta_resumen,
+            ],
+            expand=True,
+            spacing=10,
+        ),
+        padding=12,
+        bgcolor=ft.Colors.WHITE,
+        border_radius=8,
+        border=ft.border.all(1, ft.Colors.GREY_300),
+        expand=True,
+    )

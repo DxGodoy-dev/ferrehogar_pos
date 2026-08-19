@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 from collections.abc import Generator
 from contextlib import contextmanager
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
-from ferrehogar_pos.core.database import ProductoAliasDB, ProductoDB, SessionLocal
-from ferrehogar_pos.core.schemas import ProductoCrear, ProductoDTO
+from ferrehogar_pos.core.database import SessionLocal
+from ferrehogar_pos.models.producto import ProductoAliasDB, ProductoDB
+from ferrehogar_pos.schemas.producto import ProductoCrear, ProductoDTO
 
 
 @contextmanager
@@ -14,9 +17,6 @@ def obtener_session() -> Generator[Session, None, None]:
 
     Yields:
         Session: Sesión activa de SQLAlchemy para interactuar con la base de datos.
-
-    Raises:
-        SQLAlchemyError: Si ocurre un error durante el uso o conexión de la sesión.
     """
     db = SessionLocal()
     try:
@@ -33,10 +33,7 @@ def buscar_productos_por_termino(db: Session, termino: str) -> list[ProductoDTO]
         termino (str): Término o criterio de búsqueda (código, nombre o alias).
 
     Returns:
-        list[ProductoDTO]: Lista de productos coincidentes sin duplicados desacoplados de la DB.
-
-    Raises:
-        SQLAlchemyError: Si ocurre un fallo durante la consulta a la base de datos.
+        list[ProductoDTO]: Lista de productos coincidentes desacoplados de la DB.
     """
     termino_limpio = termino.strip().lower()
     if not termino_limpio:
@@ -53,7 +50,7 @@ def buscar_productos_por_termino(db: Session, termino: str) -> list[ProductoDTO]
                 ProductoAliasDB.alias.ilike(f"%{termino_limpio}%"),
             )
         )
-        .distinct()  # Evita productos duplicados si coinciden múltiples aliases
+        .distinct()
         .all()
     )
 
@@ -81,12 +78,7 @@ def crear_producto_local(db: Session, producto_in: ProductoCrear) -> ProductoDTO
 
     Returns:
         ProductoDTO: Instancia validada y persistida en formato DTO.
-
-    Raises:
-        IntegrityError: Si el código del producto ya existe o viola una restricción de unicidad.
-        SQLAlchemyError: Si ocurre un error en la persistencia o commit de la base de datos.
     """
-    # Creamos la instancia principal del producto
     nuevo_producto = ProductoDB(
         codigo=producto_in.codigo.strip().lower() if producto_in.codigo else None,
         nombre=producto_in.nombre,
@@ -95,15 +87,18 @@ def crear_producto_local(db: Session, producto_in: ProductoCrear) -> ProductoDTO
         precio_compra_usd=producto_in.precio_compra_usd,
     )
 
-    # Mapeamos la lista de strings de los aliases a instancias de ProductoAliasDB
     if producto_in.aliases:
         nuevo_producto.aliases_rel = [
             ProductoAliasDB(alias=alias_str) for alias_str in producto_in.aliases
         ]
 
-    db.add(nuevo_producto)
-    db.commit()
-    db.refresh(nuevo_producto)
+    try:
+        db.add(nuevo_producto)
+        db.commit()
+        db.refresh(nuevo_producto)
+    except Exception:
+        db.rollback()
+        raise
 
     return ProductoDTO(
         id=nuevo_producto.id,

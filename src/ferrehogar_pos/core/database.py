@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, create_engine, event
+from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import DeclarativeBase, relationship, sessionmaker
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
 def _obtener_db_url() -> str:
@@ -22,7 +21,11 @@ def _obtener_db_url() -> str:
         # Ruta estándar multiplataforma
         if os.name == "nt":
             app_data = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
-            base_dir = Path(app_data) / "ferrehogar-pos" if app_data else Path.home() / ".ferrehogar-pos"
+            base_dir = (
+                Path(app_data) / "ferrehogar-pos"
+                if app_data
+                else Path.home() / ".ferrehogar-pos"
+            )
         else:
             base_dir = Path.home() / ".local" / "share" / "ferrehogar-pos"
 
@@ -53,55 +56,14 @@ def _activar_foreign_keys(dbapi_connection: object, connection_record: object) -
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-# Clase base moderna de SQLAlchemy 2.0
+# Clase base declarativa de SQLAlchemy 2.0
 class Base(DeclarativeBase):
     pass
 
 
-class ProductoAliasDB(Base):
-    """Modelo que almacena los aliases individuales de un producto para búsquedas eficientes."""
-
-    __tablename__ = "producto_aliases"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    producto_id = Column(
-        Integer,
-        ForeignKey("productos.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    alias = Column(String(100), nullable=False, index=True)
-
-    # Relación inversa hacia el producto
-    producto = relationship("ProductoDB", back_populates="aliases_rel")
-
-
-class ProductoDB(Base):
-    """Modelo relacional principal que define la estructura física de la tabla productos."""
-
-    __tablename__ = "productos"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    codigo = Column(String(50), unique=True, nullable=True, index=True)
-    nombre = Column(String(150), nullable=False, index=True)
-    area = Column(String(50), default="General", index=True)
-    precio_venta_usd = Column(Float, nullable=False)
-    precio_compra_usd = Column(Float, nullable=False)
-    ultima_actualizacion = Column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
-
-    # Relación uno-a-muchos con borrado en cascada
-    aliases_rel = relationship(
-        "ProductoAliasDB",
-        back_populates="producto",
-        cascade="all, delete-orphan",
-        lazy="selectinload",
-    )
-
-
 def init_db() -> None:
-    """Crea todas las tablas definidas si no existen en la base de datos."""
+    """Crea todas las tablas definidas importando los modelos para registrarlos en Base."""
+    # Importación diferida para registrar las clases hijas en Base.metadata sin dependencias circulares
+    from ferrehogar_pos.models import producto, venta  # noqa: F401
+
     Base.metadata.create_all(bind=engine)

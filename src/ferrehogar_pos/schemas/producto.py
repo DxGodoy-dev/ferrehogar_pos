@@ -1,9 +1,12 @@
+from __future__ import annotations
+
 from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ProductoBase(BaseModel):
-    """Esquema base con las especificaciones del negocio de la ferretería."""
+    """Esquema base con las especificaciones del producto en el catálogo."""
 
     codigo: str | None = Field(default=None, max_length=50)
     nombre: str = Field(..., min_length=3, max_length=150)
@@ -15,13 +18,13 @@ class ProductoBase(BaseModel):
     @field_validator("nombre")
     @classmethod
     def limpiar_nombre(cls, v: str) -> str:
-        """Normaliza el nombre eliminando espacios vacíos o dobles."""
+        """Normaliza el nombre eliminando espacios redundantes."""
         return " ".join(v.split()).strip()
 
     @field_validator("aliases", mode="before")
     @classmethod
     def normalizar_aliases(cls, v: object) -> list[str]:
-        """Asegura que los aliases sean siempre una lista de strings limpios y en minúsculas."""
+        """Asegura que los aliases sean una lista de cadenas limpias en minúsculas."""
         if isinstance(v, str):
             if not v.strip():
                 return []
@@ -32,13 +35,13 @@ class ProductoBase(BaseModel):
 
 
 class ProductoCrear(ProductoBase):
-    """Esquema requerido para registrar un nuevo producto."""
+    """Esquema requerido para la creación de un nuevo producto en base de datos."""
 
     pass
 
 
 class ProductoDTO(ProductoBase):
-    """Representa el producto con metadatos provenientes de la base de datos."""
+    """DTO inmutable de lectura que representa un producto persistido."""
 
     id: int
     ultima_actualizacion: datetime
@@ -48,7 +51,7 @@ class ProductoDTO(ProductoBase):
     @field_validator("aliases", mode="before")
     @classmethod
     def extraer_aliases_orm(cls, v: object) -> object:
-        """Permite mapear la relación ProductoDB.aliases_rel si está presente."""
+        """Permite mapear la relación ProductoDB.aliases_rel cuando viene del ORM."""
         if hasattr(v, "__iter__") and not isinstance(v, (str, bytes)):
             items = list(v)
             if items and hasattr(items[0], "alias"):

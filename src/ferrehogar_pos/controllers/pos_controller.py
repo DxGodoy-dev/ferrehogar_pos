@@ -1,91 +1,102 @@
 from __future__ import annotations
 
-import math
 from typing import Any
 
-from ..core import crud
-from ..core.crud import obtener_session
-from ..core.exchange import ExchangeRateProvider
-from ..core.schemas import ProductoDTO
+from ferrehogar_pos.core.exchange import ExchangeRateProvider
+from ferrehogar_pos.core.logger import logger
+from ferrehogar_pos.crud.crud_producto import (
+    buscar_productos_por_termino,
+    obtener_session,
+)
+from ferrehogar_pos.crud.crud_venta import registrar_venta
+from ferrehogar_pos.schemas.producto import ProductoDTO
+from ferrehogar_pos.schemas.venta import VentaCrear, VentaDTO
+from ferrehogar_pos.services.carrito_service import CarritoService
 
 
 class POSController:
-    """Controlador principal que gestiona la lógica de negocio para el punto de venta."""
+    """Controlador ligero que orquesta los servicios de carrito, tasa y persistencia."""
 
     def __init__(self) -> None:
-        # Inicializa el proveedor de tasa de cambio
-        self.exchange_provider = ExchangeRateProvider()
+        self.tasa_service = ExchangeRateProvider()
+        self.carrito_service = CarritoService()
 
-        # El carrito es un diccionario: {producto_id: {"producto": ProductoDTO, "cantidad": int}}
-        self.carrito: dict[int, dict[str, Any]] = {}
+        # Sincronización inicial de la tasa oficial
+        self.tasa_service.fetch_bcv_rate()
 
-        # Almacena la fecha de la última actualización de la tasa en el controlador
-        self.fecha_actualizacion_tasa: str = "No disponible"
-
-        # Intentar cargar la tasa del BCV al iniciar el controlador
-        self.actualizar_tasa_bcv()
-
-    def actualizar_tasa_bcv(self) -> tuple[float, str] | None:
-        """Intenta obtener la tasa oficial del día y actualiza la fecha en memoria."""
-        resultado = self.exchange_provider.fetch_bcv_rate()
-        if resultado:
-            tasa, fecha = resultado
-            self.fecha_actualizacion_tasa = fecha
-            return resultado
-        return None
-
-    def establecer_tasa_manual(self, valor: float) -> None:
-        """Permite al usuario ingresar una tasa a mano y marca la fecha como Manual."""
-        self.exchange_provider.current_rate = valor
-        self.fecha_actualizacion_tasa = "Ingresada manualmente"
-
-    def obtener_tasa_actual(self) -> float | None:
-        """Devuelve la tasa de cambio activa en memoria."""
-        return self.exchange_provider.current_rate
+    @property
+    def carrito(self) -> dict[int, dict[str, Any]]:
+        """Expone los ítems del carrito para compatibilidad directa con los componentes de la vista."""
+        return self.carrito_service.items
 
     def buscar_productos(self, termino: str) -> list[ProductoDTO]:
-        """Invoca la búsqueda inteligente en la base de datos."""
+        """Ejecuta una búsqueda de productos en la base de datos local."""
         with obtener_session() as db:
-            return crud.buscar_productos_por_termino(db, termino)
+            return buscar_productos_por_termino(db, termino)
 
     def gestionar_cantidad(
         self, producto: ProductoDTO, decremento: bool = False
     ) -> None:
-        """Gestiona el incremento o decremento de cantidades en el carrito."""
-        if producto.id not in self.carrito:
-            if not decremento:
-                self.carrito[producto.id] = {"producto": producto, "cantidad": 1}
-            return
-
-        if decremento:
-            self.carrito[producto.id]["cantidad"] -= 1
-            if self.carrito[producto.id]["cantidad"] <= 0:
-                del self.carrito[producto.id]  # Eliminamos si llega a cero
+        """Añade, incrementa o decrementa la cantidad de un producto en el carrito."""
+        if not decremento:
+            self.carrito_service.agregar_o_incrementar(producto, cantidad=1)
         else:
-            self.carrito[producto.id]["cantidad"] += 1
+            self.carrito_service.decrementar_o_eliminar(producto.id, cantidad=1)
 
     def limpiar_carrito(self) -> None:
-        """Vacía todos los elementos de la simulación actual."""
-        self.carrito.clear()
+        """Vacía todos los artículos del carrito."""
+        self.carrito_service.limpiar()
 
-    def calcular_totales(self) -> dict[str, Any]:
-        """Calcula el total acumulado en dólares y bolívares,
+    def obtener_tasa_actual(self) -> float | None:
+        """Retorna el valor numérico de la tasa de cambio activa."""
+        return self.tasa_service.current_rate
 
-        e incluye la fecha y hora de la última actualización de la tasa.
+    @property
+    def fecha_actualizacion_tasa(self) -> str | None:
+        """Retorna el metadato de fecha de la tasa BCV activa."""
+        return self.tasa_service.last_update
+
+    def calcular_totales(self) -> dict[str, float | int]:
+        """Calcula los totales en USD y VES delegando en el servicio de carrito."""
+        tasa = self.obtener_tasa_actual()
+        return self.carrito_service.calcular_totales(tasa_bcv=tasa)
+
+    def procesar_venta(self) -> VentaDTO:
+        """Valida, registra la transacción en base de datos y vacía el carrito.
+
+        Raises:
+            ValueError: Si el carrito está vacío o si no hay una tasa válida.
         """
-        tasa = self.obtener_tasa_actual() or 0.0
-        total_usd = 0.0
+        if self.carrito_service.esta_vacio:
+            raise ValueError(
+                "El carrito está vacío. Agregue productos antes de cobrar."
+            )
 
-        for item in self.carrito.values():
-            producto: ProductoDTO = item["producto"]
-            cantidad: int = item["cantidad"]
-            total_usd += producto.precio_venta_usd * cantidad
+        tasa = self.obtener_tasa_actual()
+        if not tasa or tasa <= 0:
+            raise ValueError(
+                "No hay una tasa de cambio válida establecida para procesar la transacción."
+            )
 
-        total_usd_redondeado = round(total_usd, 2)
-        total_ves_entero = math.ceil(total_usd_redondeado * tasa)
+        totales = self.calcular_totales()
+        fecha_ref = self.fecha_actualizacion_tasa or "No disponible"
+        detalles = self.carrito_service.generar_detalles_payload()
 
-        return {
-            "total_usd": total_usd_redondeado,
-            "total_ves": total_ves_entero,
-            "tasa_fecha": self.fecha_actualizacion_tasa,
-        }
+        venta_payload = VentaCrear(
+            tasa_bcv_aplicada=tasa,
+            tasa_fecha_referencia=fecha_ref,
+            total_usd=float(totales["total_usd"]),
+            total_ves=int(totales["total_ves"]),
+            detalles=detalles,
+        )
+
+        with obtener_session() as db:
+            venta_registrada = registrar_venta(db, venta_payload)
+
+        logger.info(
+            f"Venta #{venta_registrada.id} procesada exitosamente: "
+            f"${venta_registrada.total_usd:.2f} USD ({venta_registrada.total_ves} VES)"
+        )
+
+        self.carrito_service.limpiar()
+        return venta_registrada
